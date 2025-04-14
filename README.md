@@ -3,3 +3,10 @@ This repository is the implementation of the code corresponding to the paper xxx
 
 ## Overview
 <img src="./overview.png" alt="drawing" width="800">
+
+To use our abstract and instantiate methods, you can run the following commands:You just need to replace the input and output paths in the code and replace the api_key of the larger model.
+```shell
+cd code;
+python abstract.py
+python normalization.py
+```
