@@ -27,3 +27,26 @@ cd code;
 python abstract.py
 python normalization.py
 ```
+
+Usage Instructions
+
+To leverage our abstract framework and instantiate methods, follow these steps:
+
+Configure Paths
+Modify the following variables in the code:
+```python
+input_path = "your/input/path"  # Replace with your input directory
+output_path = "your/output/path"  # Specify desired output location
+```
+API Key Setup
+Replace the placeholder with your LLM provider's API key:
+```python
+api_key = "your_api_key_here"  # e.g., OpenAI, Anthropic, etc.
+```
+Execution
+Run the core pipeline with:
+```shell
+cd code;
+python abstract.py
+python normalization.py
+```
