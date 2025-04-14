@@ -21,13 +21,6 @@ All datasets and pre-trained weights will be released via [cloud storage (e.g., 
 
 <img src="./overview.png" alt="drawing" width="800">
 
-To use our abstract and instantiate methods, you can run the following commands:You just need to replace the input and output paths in the code and replace the api_key of the larger model.
-```shell
-cd code;
-python abstract.py
-python normalization.py
-```
-
 Usage Instructions
 
 To leverage our abstract framework and instantiate methods, follow these steps:
@@ -41,7 +34,7 @@ output_path = "your/output/path"  # Specify desired output location
 API Key Setup
 Replace the placeholder with your LLM provider's API key:
 ```python
-api_key = "your_api_key_here"  # e.g., OpenAI, Anthropic, etc.
+api_key = "your_api_key_here"  # e.g.deepseek,gpt4-o-mini
 ```
 Execution
 Run the core pipeline with:
