@@ -11,13 +11,13 @@ code/
 
 Our abstraction and instantiation implementations.
 
-🗃 Data Availability
+🗃 Data & Model Weights
 
-Due to the large volume of experimental data:
+Due to the large volume of experimental data and model files:
 
-Currently, we only provide the CodeDenoise dataset for the code cloning task to support reproducibility.
-Full datasets will be released via [cloud storage (e.g., Google Drive)] after the double-blind review process.
-
+Currently, we provide only the CodeDenoise dataset for the code cloning task to support reproducibility.
+Model weights are temporarily excluded due to file size constraints.
+All datasets and pre-trained weights will be released via [cloud storage (e.g., Google Drive)] after the double-blind review process.
 
 <img src="./overview.png" alt="drawing" width="800">
 
