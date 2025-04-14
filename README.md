@@ -4,16 +4,20 @@ This repository provides the official implementation of the paper [Paper Title] 
 📂 Code Structure
 
 CODA/, ALERT/, CodeTAE/, CodeDenoise/
+
 Implementation of each baseline method, with separate modules for different models and tasks.
+
 code/
-Core abstract classes and their instantiated implementations.
+
+Our abstraction and instantiation implementations.
+
 🗃 Data Availability
 
 Due to the large volume of experimental data:
 
 Currently, we only provide the CodeDenoise dataset for the code cloning task to support reproducibility.
-Full datasets will be released via [cloud storage (e.g., Google Drive/Baidu Netdisk)] after the double-blind review process.
-(A temporary access link will be updated here once available.)
+Full datasets will be released via [cloud storage (e.g., Google Drive)] after the double-blind review process.
+
 
 <img src="./overview.png" alt="drawing" width="800">
 
