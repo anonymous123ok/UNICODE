@@ -19,7 +19,7 @@ Currently, we provide the dataset for the clone detection task corresponding to 
 Model weights are temporarily excluded due to file size constraints.
 All datasets and pre-trained weights will be released via [cloud storage (e.g., Google Drive)] after the double-blind review process.
 
-<img src="./overview.png" alt="drawing" width="800">
+<img src="./overview.jpg" alt="drawing" width="800">
 
 Usage Instructions
 
