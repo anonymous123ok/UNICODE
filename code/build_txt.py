@@ -2,10 +2,10 @@ import os
 
 
 model_name = 'codebert'  # graphcodebert  codebert codet5 CodeBERT GraphCodeBERT CodeT5
-shilihua_path='/workspace/CODA_new/CodeTAE_gpt4oMini/C-Defects/shilihua_%s_test' % model_name
+shilihua_path='/workspace/CODA_new/CodeTAE_gpt4oMini/C-Defects/%s_test' % model_name
 files = os.listdir(shilihua_path)
 files_sorted = sorted(files, key=lambda x: int(x.split('_')[0]))
-out_path = '/workspace/CODA_new/CodeTAE_gpt4oMini/C-Defects/shilihua_txt/%s' % model_name
+out_path = '/workspace/CODA_new/CodeTAE_gpt4oMini/C-Defects/txt/%s' % model_name
 if not os.path.exists(out_path):
     os.makedirs(out_path)
 with open(out_path + '/test.txt', 'w') as w:
