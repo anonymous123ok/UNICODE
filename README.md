@@ -21,6 +21,8 @@ All datasets and pre-trained weights will be released via [cloud storage (e.g., 
 
 <img src="https://github.com/anonymous123ok/UNICODE/blob/366231581d33986d64a2a3101a5f25c93deac5b3/overview.jpg" alt="drawing" width="800">
 
+![Overview](https://github.com/anonymous123ok/UNICODE/blob/366231581d33986d64a2a3101a5f25c93deac5b3/overview.jpg)
+
 Usage Instructions
 
 To leverage our abstract framework and instantiate methods, follow these steps:
