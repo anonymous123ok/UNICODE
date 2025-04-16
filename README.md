@@ -50,7 +50,7 @@ Currently, we provide the dataset for the clone detection task to support reprod
 ## Requirements:
 
 - python==3.7.7
-- tensorflow==2.3.0
+- transformers==4.8.2
 - pytorch==1.5.1
 - pandas==1.3.0
 
