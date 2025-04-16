@@ -25,8 +25,8 @@ Here, we briefly introduce the usage of each directory:
 │  ├─replace_method_name.py (abstracting function names)
 │  ├─normalization.py (conducting code instantiation using LLM)
 │  ├─build_txt.py (conducting data pre-processing)
-│  ├─VulnerabilityPrediction_build_jsonl.py (configuration)
-├─python_parser (parsing the python code for further analysis)
+│  ├─VulnerabilityPrediction_build_jsonl.py (conducting data pre-processing)
+├─python_parser (parsing code for further analysis)
 ```
 
 ## Datasets/Models
