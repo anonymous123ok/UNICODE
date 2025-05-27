@@ -1,0 +1,605 @@
+from __future__ import absolute_import, division, print_function
+import os
+import pickle
+import random
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+import sys
+import json
+
+sys.path.append('../../../')
+from language_parser.run_parser import parsers
+from language_parser import get_identifiers_c, get_example, get_identifiers
+from tqdm import tqdm
+from language_parser.parse_util import extract_dataflow
+
+cpu_cont = 16
+
+
+
+
+class CodeBertInputFeatures(object):
+    def __init__(self, input_tokens, input_ids, idx, label):
+        self.input_tokens = input_tokens
+        self.input_ids = input_ids
+        self.idx = str(idx)
+        self.label = label
+
+
+# class GraphCodeBertInputFeatures(object):
+#     def __init__(self, input_tokens, input_ids, position_idx, dfg_to_code, dfg_to_dfg, label):
+#         self.input_tokens = input_tokens
+#         self.input_ids = input_ids
+#         self.position_idx = position_idx
+#         self.dfg_to_code = dfg_to_code
+#         self.dfg_to_dfg = dfg_to_dfg
+#         self.label = label
+
+class GraphCodeBertInputFeatures(object):
+    """A single training/test features for a example."""
+
+    def __init__(self, input_tokens_1, input_ids_1, position_idx_1, dfg_to_code_1, dfg_to_dfg_1, input_tokens_2,
+                 input_ids_2, position_idx_2, dfg_to_code_2, dfg_to_dfg_2, label):
+        # The first code function
+        self.input_tokens_1 = input_tokens_1
+        self.input_ids_1 = input_ids_1
+        self.position_idx_1 = position_idx_1
+        self.dfg_to_code_1 = dfg_to_code_1
+        self.dfg_to_dfg_1 = dfg_to_dfg_1
+        # The second code function
+        self.input_tokens_2 = input_tokens_2
+        self.input_ids_2 = input_ids_2
+        self.position_idx_2 = position_idx_2
+        self.dfg_to_code_2 = dfg_to_code_2
+        self.dfg_to_dfg_2 = dfg_to_dfg_2
+        # label
+        self.label = label
+
+
+class CodeT5InputFeatures(object):
+    def __init__(self, input_tokens, input_ids, idx, label):
+        self.input_tokens = input_tokens
+        self.input_ids = input_ids
+        self.idx = str(idx)
+        self.label = label
+
+
+def codebert_convert_examples_to_features(code1, code2, label, tokenizer, args):
+    code1_tokens = tokenizer.tokenize(code1)[:args.block_size - 2]
+    code2_tokens = tokenizer.tokenize(code2)[:args.block_size - 2]
+    code1_tokens = [tokenizer.cls_token] + code1_tokens + [tokenizer.sep_token]
+    code2_tokens = [tokenizer.cls_token] + code2_tokens + [tokenizer.sep_token]
+
+    code1_ids = tokenizer.convert_tokens_to_ids(code1_tokens)
+    padding_length = args.block_size - len(code1_ids)
+    code1_ids += [tokenizer.pad_token_id] * padding_length
+
+    code2_ids = tokenizer.convert_tokens_to_ids(code2_tokens)
+    padding_length = args.block_size - len(code2_ids)
+    code2_ids += [tokenizer.pad_token_id] * padding_length
+
+    source_tokens = code1_tokens + code2_tokens
+    source_ids = code1_ids + code2_ids
+    return CodeBertInputFeatures(source_tokens, source_ids, 0, label)
+
+
+def graphcodebert_convert_examples_to_features(code1, code2, label, tokenizer, args):
+    parser = parsers[args.language_type]
+    func = code1
+    code_tokens, dfg = extract_dataflow(func, parser, 'java')
+    code_tokens = [tokenizer.tokenize('@ ' + x)[1:] if idx != 0 else tokenizer.tokenize(x) for idx, x in
+                   enumerate(code_tokens)]
+    ori2cur_pos = {}
+    ori2cur_pos[-1] = (0, 0)
+    for i in range(len(code_tokens)):
+        ori2cur_pos[i] = (ori2cur_pos[i - 1][1], ori2cur_pos[i - 1][1] + len(code_tokens[i]))
+    code_tokens = [y for x in code_tokens for y in x]
+
+    # truncating
+    code_tokens = code_tokens[
+                  :args.code_length + args.data_flow_length - 3 - min(len(dfg), args.data_flow_length)][
+                  :512 - 3]
+    source_tokens = [tokenizer.cls_token] + code_tokens + [tokenizer.sep_token]
+    source_ids = tokenizer.convert_tokens_to_ids(source_tokens)
+    position_idx = [i + tokenizer.pad_token_id + 1 for i in range(len(source_tokens))]
+    dfg = dfg[:args.code_length + args.data_flow_length - len(source_tokens)]
+    source_tokens += [x[0] for x in dfg]
+    position_idx += [0 for x in dfg]
+    source_ids += [tokenizer.unk_token_id for x in dfg]
+    padding_length = args.code_length + args.data_flow_length - len(source_ids)
+    position_idx += [tokenizer.pad_token_id] * padding_length
+    source_ids += [tokenizer.pad_token_id] * padding_length
+
+    # reindex
+    reverse_index = {}
+    for idx, x in enumerate(dfg):
+        reverse_index[x[1]] = idx
+    for idx, x in enumerate(dfg):
+        dfg[idx] = x[:-1] + ([reverse_index[i] for i in x[-1] if i in reverse_index],)
+    dfg_to_dfg_1 = [x[-1] for x in dfg]
+    dfg_to_code = [ori2cur_pos[x[1]] for x in dfg]
+    length = len([tokenizer.cls_token])
+    dfg_to_code_1 = [(x[0] + length, x[1] + length) for x in dfg_to_code]
+    position_idx_1 = position_idx
+    source_ids_1 = source_ids
+    source_tokens_1 = source_tokens
+    ####################################
+    func = code2
+    code_tokens, dfg = extract_dataflow(func, parser, 'java')
+    code_tokens = [tokenizer.tokenize('@ ' + x)[1:] if idx != 0 else tokenizer.tokenize(x) for idx, x in
+                   enumerate(code_tokens)]
+    ori2cur_pos = {}
+    ori2cur_pos[-1] = (0, 0)
+    for i in range(len(code_tokens)):
+        ori2cur_pos[i] = (ori2cur_pos[i - 1][1], ori2cur_pos[i - 1][1] + len(code_tokens[i]))
+    code_tokens = [y for x in code_tokens for y in x]
+
+    # truncating
+    code_tokens = code_tokens[
+                  :args.code_length + args.data_flow_length - 3 - min(len(dfg), args.data_flow_length)][
+                  :512 - 3]
+    source_tokens = [tokenizer.cls_token] + code_tokens + [tokenizer.sep_token]
+    source_ids = tokenizer.convert_tokens_to_ids(source_tokens)
+    position_idx = [i + tokenizer.pad_token_id + 1 for i in range(len(source_tokens))]
+    dfg = dfg[:args.code_length + args.data_flow_length - len(source_tokens)]
+    source_tokens += [x[0] for x in dfg]
+    position_idx += [0 for x in dfg]
+    source_ids += [tokenizer.unk_token_id for x in dfg]
+    padding_length = args.code_length + args.data_flow_length - len(source_ids)
+    position_idx += [tokenizer.pad_token_id] * padding_length
+    source_ids += [tokenizer.pad_token_id] * padding_length
+
+    # reindex
+    reverse_index = {}
+    for idx, x in enumerate(dfg):
+        reverse_index[x[1]] = idx
+    for idx, x in enumerate(dfg):
+        dfg[idx] = x[:-1] + ([reverse_index[i] for i in x[-1] if i in reverse_index],)
+    dfg_to_dfg_2 = [x[-1] for x in dfg]
+    dfg_to_code = [ori2cur_pos[x[1]] for x in dfg]
+    length = len([tokenizer.cls_token])
+    dfg_to_code_2 = [(x[0] + length, x[1] + length) for x in dfg_to_code]
+    position_idx_2 = position_idx
+    source_ids_2 = source_ids
+    source_tokens_2 = source_tokens
+    return GraphCodeBertInputFeatures(source_tokens_1, source_ids_1, position_idx_1, dfg_to_code_1, dfg_to_dfg_1,
+                                      source_tokens_2, source_ids_2, position_idx_2, dfg_to_code_2, dfg_to_dfg_2, label
+                                      )
+
+
+def codet5_convert_examples_to_features(code1, code2, label, tokenizer, args):
+    # 处理第一个代码段
+    code1_tokens = tokenizer.tokenize(code1)[:args.block_size - 2]
+    code1_tokens = [tokenizer.cls_token] + code1_tokens + [tokenizer.sep_token]
+
+    # 处理第二个代码段
+    code2_tokens = tokenizer.tokenize(code2)[:args.block_size - 2]
+    code2_tokens = [tokenizer.cls_token] + code2_tokens + [tokenizer.sep_token]
+
+    # 转换为ID并填充
+    code1_ids = tokenizer.convert_tokens_to_ids(code1_tokens)
+    padding_length = args.block_size - len(code1_ids)
+    code1_ids += [tokenizer.pad_token_id] * padding_length
+
+    code2_ids = tokenizer.convert_tokens_to_ids(code2_tokens)
+    padding_length = args.block_size - len(code2_ids)
+    code2_ids += [tokenizer.pad_token_id] * padding_length
+
+    # 合并两个代码段
+    source_tokens = code1_tokens + code2_tokens
+    source_ids = code1_ids + code2_ids
+
+    return CodeT5InputFeatures(source_tokens, source_ids, 0, label)
+
+
+def codet5_convert_examples_to_features_ori(code, label, tokenizer, args):
+    code_tokens = tokenizer.tokenize(code)[:args.block_size - 2]
+    source_tokens = [tokenizer.cls_token] + code_tokens + [tokenizer.sep_token]
+    source_ids = tokenizer.convert_tokens_to_ids(source_tokens)
+    padding_length = args.block_size - len(source_ids)
+    source_ids += [tokenizer.pad_token_id] * padding_length
+    return CodeT5InputFeatures(source_tokens, source_ids, 0, label)
+
+
+class CodeBertTextDataset(Dataset):
+    def __init__(self, tokenizer, args, file_path=None):
+        self.examples = []
+        file_type = file_path.split('/')[-1].split('.')[0]
+        folder = '/'.join(file_path.split('/')[:-1]) + '/cached'
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+        cache_file_path = os.path.join(folder, '{}_cached_{}'.format(args.model_name, file_type))
+        code_pairs_file_path = os.path.join(folder, '{}_cached_{}.pkl'.format(args.model_name, file_type))
+
+        idx2jsonl = {}
+        with open(args.datajsonl) as rf:
+            for line in rf:
+                json_data = json.loads(line)
+                code = json_data['func']
+                idx = json_data['idx']
+                idx2jsonl[idx] = code
+
+        print('\n cached_features_file: ', cache_file_path)
+        try:
+            self.examples = torch.load(cache_file_path)
+            with open(code_pairs_file_path, 'rb') as f:
+                self.code_files = pickle.load(f)
+        except:
+            self.code_files = []
+            with open(file_path) as f:
+                for line in f:
+                    line = line.strip()
+                    url1, url2, label = line.split('\t')
+                    code1 = idx2jsonl[url1]
+                    code2 = idx2jsonl[url2]
+                    content = '<s>' + code1 + '</s><s>' + code2 + '</s>'.replace("\\n", "\n").replace('\"', '"')
+                    self.examples.append(
+                        codebert_convert_examples_to_features(code1, code2, int(label), tokenizer, args))
+                    self.code_files.append(content)
+            assert (len(self.examples) == len(self.code_files))
+            with open(code_pairs_file_path, 'wb') as f:
+                pickle.dump(self.code_files, f)
+            torch.save(self.examples, cache_file_path)
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, item):
+        return torch.tensor(self.examples[item].input_ids), torch.tensor(self.examples[item].label), self.code_files[
+            item]
+
+
+class GraphCodeBertTextDataset(Dataset):
+    def __init__(self, tokenizer, args, file_path=None):
+        self.examples = []
+        self.args = args
+        file_type = file_path.split('/')[-1].split('.')[0]
+        folder = '/'.join(file_path.split('/')[:-1]) + '/cached'
+
+        cache_file_path = os.path.join(folder, '{}_cached_{}'.format(args.model_name, file_type))
+        code_pairs_file_path = os.path.join(folder, '{}_cached_{}.pkl'.format(args.model_name, file_type))
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+        idx2jsonl = {}
+        with open(args.datajsonl) as rf:
+            for line in rf:
+                json_data = json.loads(line)
+                code = json_data['func']
+                idx = json_data['idx']
+                idx2jsonl[idx] = code
+
+        print('\n cached_features_file: ', cache_file_path)
+        try:
+            self.examples = torch.load(cache_file_path)
+            with open(code_pairs_file_path, 'rb') as f:
+                self.code_files = pickle.load(f)
+        except:
+            self.code_files = []
+            with open(file_path) as f:
+                for idx, line in enumerate(f):
+                    # print("idx = {}".format(idx))
+                    line = line.strip()
+                    url1, url2, label = line.split('\t')
+                    code1 = idx2jsonl[url1]
+                    code2 = idx2jsonl[url2]
+                    content = '<s>' + code1 + '</s><s>' + code2 + '</s>'.replace("\\n", "\n").replace('\"', '"')
+                    self.examples.append(
+                        graphcodebert_convert_examples_to_features(code1, code2, int(label), tokenizer, args))
+                    self.code_files.append(content)
+            assert (len(self.examples) == len(self.code_files))
+            with open(code_pairs_file_path, 'wb') as f:
+                pickle.dump(self.code_files, f)
+            torch.save(self.examples, cache_file_path)
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, item):
+        attn_mask1 = np.zeros((self.args.code_length + self.args.data_flow_length,
+                               self.args.code_length + self.args.data_flow_length), dtype=np.bool)
+        node_index = sum([i > 1 for i in self.examples[item].position_idx_1])
+        max_length = sum([i != 1 for i in self.examples[item].position_idx_1])
+        attn_mask1[:node_index, :node_index] = True
+        for idx, i in enumerate(self.examples[item].input_ids_1):
+            if i in [0, 2]:
+                attn_mask1[idx, :max_length] = True
+        for idx, (a, b) in enumerate(self.examples[item].dfg_to_code_1):
+            if a < node_index and b < node_index:
+                attn_mask1[idx + node_index, a:b] = True
+                attn_mask1[a:b, idx + node_index] = True
+        for idx, nodes in enumerate(self.examples[item].dfg_to_dfg_1):
+            for a in nodes:
+                if a + node_index < len(self.examples[item].position_idx_1):
+                    attn_mask1[idx + node_index, a + node_index] = True
+        #######
+        attn_mask2 = np.zeros((self.args.code_length + self.args.data_flow_length,
+                               self.args.code_length + self.args.data_flow_length), dtype=np.bool)
+        node_index = sum([i > 1 for i in self.examples[item].position_idx_2])
+        max_length = sum([i != 1 for i in self.examples[item].position_idx_2])
+        attn_mask2[:node_index, :node_index] = True
+        for idx, i in enumerate(self.examples[item].input_ids_2):
+            if i in [0, 2]:
+                attn_mask2[idx, :max_length] = True
+        for idx, (a, b) in enumerate(self.examples[item].dfg_to_code_2):
+            if a < node_index and b < node_index:
+                attn_mask2[idx + node_index, a:b] = True
+                attn_mask2[a:b, idx + node_index] = True
+        for idx, nodes in enumerate(self.examples[item].dfg_to_dfg_2):
+            for a in nodes:
+                if a + node_index < len(self.examples[item].position_idx_2):
+                    attn_mask2[idx + node_index, a + node_index] = True
+
+        return (torch.tensor(self.examples[item].input_ids_1),
+                torch.tensor(self.examples[item].position_idx_1),
+                torch.tensor(attn_mask1),
+                torch.tensor(self.examples[item].input_ids_2),
+                torch.tensor(self.examples[item].position_idx_2),
+                torch.tensor(attn_mask2),
+                torch.tensor(self.examples[item].label)
+        )
+
+
+class CodeT5TextDataset(Dataset):
+    def __init__(self, tokenizer, args, file_path=None):
+        self.examples = []
+        file_type = file_path.split('/')[-1].split('.')[0]
+        folder = '/'.join(file_path.split('/')[:-1]) + '/cached'
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+        cache_file_path = os.path.join(folder, '{}_cached_{}'.format(args.model_name, file_type))
+        code_pairs_file_path = os.path.join(folder, '{}_cached_{}.pkl'.format(args.model_name, file_type))
+
+        idx2jsonl = {}
+        with open(args.datajsonl) as rf:
+            for line in rf:
+                json_data = json.loads(line)
+                code = json_data['func']
+                idx = json_data['idx']
+                idx2jsonl[idx] = code
+
+        print('\n cached_features_file: ', cache_file_path)
+        try:
+            self.examples = torch.load(cache_file_path)
+            with open(code_pairs_file_path, 'rb') as f:
+                self.code_files = pickle.load(f)
+        except:
+            self.code_files = []
+            with open(file_path) as f:
+                for line in f:
+                    line = line.strip()
+                    url1, url2, label = line.split('\t')
+                    code1 = idx2jsonl[url1]
+                    code2 = idx2jsonl[url2]
+                    content = '<s>' + code1 + '</s><s>' + code2 + '</s>'.replace("\\n", "\n").replace('\"', '"')
+                    self.examples.append(
+                        codet5_convert_examples_to_features(code1, code2, int(label), tokenizer, args))
+                    self.code_files.append(content)
+            assert (len(self.examples) == len(self.code_files))
+            with open(code_pairs_file_path, 'wb') as f:
+                pickle.dump(self.code_files, f)
+            torch.save(self.examples, cache_file_path)
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, item):
+        return torch.tensor(self.examples[item].input_ids), torch.tensor(self.examples[item].label), self.code_files[
+            item]
+
+
+class inf_CodeBertTextDataset(Dataset):
+    def __init__(self, tokenizer, args, file_path=None):
+
+        index_set = []
+        files = os.listdir(file_path)
+        for file in files:
+            index = file.split('_')[0]
+            index_set.append(int(index))
+
+        self.examples = []
+        index_filename = '../dataset/test_sampled.txt'
+        idx2jsonl = {}
+        with open(args.datajsonl) as rf:
+            for line in rf:
+                json_data = json.loads(line)
+                code = json_data['func']
+                idx = json_data['idx']
+                idx2jsonl[idx] = code
+        url_to_code = idx2jsonl
+        self.code_files = []
+        with open(index_filename) as f:
+            for idx, line in enumerate(f.readlines()):
+                if not int(idx) in index_set:
+                    continue
+                line = line.strip()
+                url1, url2, label = line.split('\t')
+                if url1 not in url_to_code or url2 not in url_to_code:
+                    continue
+                if label == '0':
+                    label = 0
+                else:
+                    label = 1
+                file_name = str(idx) + '_' + str(label) + '.txt'
+                # print("url1 = ", url1)
+                # print("url2 = ", url2)
+                with open(os.path.join(file_path, file_name), 'r') as f:
+                    attacked_code = f.read()
+                code2 = url_to_code[url2]
+                content = '<s>' + attacked_code + '</s><s>' + code2 + '</s>'.replace("\\n", "\n").replace('\"', '"')
+                self.examples.append(
+                    codebert_convert_examples_to_features(attacked_code, code2, label, tokenizer, args))
+                self.code_files.append(content)
+
+                assert (len(self.examples) == len(self.code_files))
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, item):
+        return torch.tensor(self.examples[item].input_ids), torch.tensor(self.examples[item].label), self.code_files[
+            item]
+
+
+class inf_GraphCodeBertTextDataset(Dataset):
+    def __init__(self, tokenizer, args, file_path=None):
+        self.args = args
+        index_set = []
+        files = os.listdir(file_path)
+        for file in files:
+            index = file.split('_')[0]
+            index_set.append(int(index))
+
+        self.examples = []
+        index_filename = '../dataset/test_sampled.txt'
+        idx2jsonl = {}
+        with open(args.datajsonl) as rf:
+            for line in rf:
+                json_data = json.loads(line)
+                code = json_data['func']
+                idx = json_data['idx']
+                idx2jsonl[idx] = code
+        url_to_code = idx2jsonl
+        self.code_files = []
+        with open(index_filename) as f:
+            for idx, line in enumerate(f.readlines()):
+                if not int(idx) in index_set:
+                    continue
+                line = line.strip()
+                url1, url2, label = line.split('\t')
+                if url1 not in url_to_code or url2 not in url_to_code:
+                    continue
+                if label == '0':
+                    label = 0
+                else:
+                    label = 1
+                file_name = str(idx) + '_' + str(label) + '.txt'
+                # print("url1 = ", url1)
+                # print("url2 = ", url2)
+                with open(os.path.join(file_path, file_name), 'r') as f:
+                    attacked_code = f.read()
+                code2 = url_to_code[url2]
+                content = '<s>' + attacked_code + '</s><s>' + code2 + '</s>'.replace("\\n", "\n").replace('\"', '"')
+                self.examples.append(
+                    graphcodebert_convert_examples_to_features(attacked_code, code2, label, tokenizer, args))
+                self.code_files.append(content)
+
+                assert (len(self.examples) == len(self.code_files))
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, item):
+        attn_mask1 = np.zeros((self.args.code_length + self.args.data_flow_length,
+                               self.args.code_length + self.args.data_flow_length), dtype=np.bool)
+        node_index = sum([i > 1 for i in self.examples[item].position_idx_1])
+        max_length = sum([i != 1 for i in self.examples[item].position_idx_1])
+        attn_mask1[:node_index, :node_index] = True
+        for idx, i in enumerate(self.examples[item].input_ids_1):
+            if i in [0, 2]:
+                attn_mask1[idx, :max_length] = True
+        for idx, (a, b) in enumerate(self.examples[item].dfg_to_code_1):
+            if a < node_index and b < node_index:
+                attn_mask1[idx + node_index, a:b] = True
+                attn_mask1[a:b, idx + node_index] = True
+        for idx, nodes in enumerate(self.examples[item].dfg_to_dfg_1):
+            for a in nodes:
+                if a + node_index < len(self.examples[item].position_idx_1):
+                    attn_mask1[idx + node_index, a + node_index] = True
+        #######
+        attn_mask2 = np.zeros((self.args.code_length + self.args.data_flow_length,
+                               self.args.code_length + self.args.data_flow_length), dtype=np.bool)
+        node_index = sum([i > 1 for i in self.examples[item].position_idx_2])
+        max_length = sum([i != 1 for i in self.examples[item].position_idx_2])
+        attn_mask2[:node_index, :node_index] = True
+        for idx, i in enumerate(self.examples[item].input_ids_2):
+            if i in [0, 2]:
+                attn_mask2[idx, :max_length] = True
+        for idx, (a, b) in enumerate(self.examples[item].dfg_to_code_2):
+            if a < node_index and b < node_index:
+                attn_mask2[idx + node_index, a:b] = True
+                attn_mask2[a:b, idx + node_index] = True
+        for idx, nodes in enumerate(self.examples[item].dfg_to_dfg_2):
+            for a in nodes:
+                if a + node_index < len(self.examples[item].position_idx_2):
+                    attn_mask2[idx + node_index, a + node_index] = True
+
+        return (torch.tensor(self.examples[item].input_ids_1),
+                torch.tensor(self.examples[item].position_idx_1),
+                torch.tensor(attn_mask1),
+                torch.tensor(self.examples[item].input_ids_2),
+                torch.tensor(self.examples[item].position_idx_2),
+                torch.tensor(attn_mask2),
+                torch.tensor(self.examples[item].label)
+        )
+
+
+class inf_CodeT5TextDataset(Dataset):
+    def __init__(self, tokenizer, args, file_path=None):
+        index_set = []
+        files = os.listdir(file_path)
+        for file in files:
+            index = file.split('_')[0]
+            index_set.append(int(index))
+
+        self.examples = []
+        index_filename = '../dataset/test_sampled.txt'
+        idx2jsonl = {}
+        with open(args.datajsonl) as rf:
+            for line in rf:
+                json_data = json.loads(line)
+                code = json_data['func']
+                idx = json_data['idx']
+                idx2jsonl[idx] = code
+        url_to_code = idx2jsonl
+        self.code_files = []
+        with open(index_filename) as f:
+            for idx, line in enumerate(f.readlines()):
+                if not int(idx) in index_set:
+                    continue
+                line = line.strip()
+                url1, url2, label = line.split('\t')
+                if url1 not in url_to_code or url2 not in url_to_code:
+                    continue
+                if label == '0':
+                    label = 0
+                else:
+                    label = 1
+                file_name = str(idx) + '_' + str(label) + '.txt'
+                # print("url1 = ", url1)
+                # print("url2 = ", url2)
+                with open(os.path.join(file_path, file_name), 'r') as f:
+                    attacked_code = f.read()
+                code2 = url_to_code[url2]
+                content = '<s>' + attacked_code + '</s><s>' + code2 + '</s>'.replace("\\n", "\n").replace('\"', '"')
+                self.examples.append(
+                    codet5_convert_examples_to_features(attacked_code, code2, label, tokenizer, args))
+                self.code_files.append(content)
+
+                assert (len(self.examples) == len(self.code_files))
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, item):
+        return torch.tensor(self.examples[item].input_ids), torch.tensor(self.examples[item].label), self.code_files[
+            item]
+
+
+def set_seed(args):
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if args.model_name == 'codebert':
+        os.environ['PYHTONHASHSEED'] = str(args.seed)
+        torch.cuda.manual_seed(args.seed)
+        torch.backends.cudnn.deterministic = True
+    elif args.model_name == 'graphcodebert':
+        if args.n_gpu > 0:
+            torch.cuda.manual_seed_all(args.seed)
+    elif args.model_name == 'codet5':
+        os.environ['PYHTONHASHSEED'] = str(args.seed)
+        torch.cuda.manual_seed(args.seed)
+        torch.backends.cudnn.deterministic = True
