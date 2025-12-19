@@ -2,11 +2,15 @@
 
 ## Contents
 
-This repository provides the official implementation of the paper 'Unified Defense: Defending Renaming-Based Adversarial Attacks via Code Normalization' (in The 2025 ACM SIGSAC Conference on Computer and Communications Security). 
+This repository provides the official implementation of the paper 'Enhancing Code Model Robustness Against Identifier Renaming via Unified Code Normalization'. 
 
 ## Description
 
 Deep code models (DCMs) are increasingly deployed in security-critical applications. Yet, their vulnerability to adversarial perturbations – such as subtle identifier renaming – poses significant risks, as these changes can induce out-of-distribution inputs and cause insecure predictions. A key challenge lies in defending against such attacks without prior knowledge of adversarial patterns, as the space of possible perturbations is virtually infinite, and conventional rule-based defenses fail to generalize. To address this challenge, we primarily focus on defending renaming-based adversarial attacks, which have the most significant impact on DCMs’ security, and propose a novel two-stage defense framework named UniCode, which proactively normalizes adversarial inputs into uniformly in-distribution representations. Please refer to overview.jpg for a detailed overview of our method's structure. Specifically, the first stage strips all identifiers into placeholders, eliminating adversarial influence while maintaining the code structure and functionality, and the second stage reconstructs semantically meaningful identifiers by leveraging contextual understanding from large language models, ensuring the comprehensive code semantics are preserved. By fine-tuning the code models on the normalized distribution, UniCode renders models inherently robust against diverse renaming attacks without requiring attack-specific adaptations. To evaluate the performance of our approach, we have conducted a comprehensive evaluation by comparing it with state-of-the-art baseline methods. The experimental results demonstrate that UniCode achieves the best defense performance on 87.9% of subjects, with average improvements ranging from 17.3% to 126.0% over baselines in terms of defending effectiveness, indicating the superior performance of UniCode.
+
+## Models and datasets
+
+We have released all model weights and related datasets used in our experiments at the following Zenodo link: xxx
 
 ## Structure
 
