@@ -23,6 +23,7 @@ Here, we briefly introduce the usage of each directory:
 │  ├─graphcodebert
 ├─CDenoise (Our baseline, CodeDenoise)
 ├─CODA (Our baseline)
+├─ITGen (Our baseline)
 ├─MARVEL (Our baseline)
 ├─CodeTAE (Our baseline)
 │─code (Our Approach, UniCode)
