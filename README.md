@@ -10,7 +10,7 @@ Deep code models (DCMs) are increasingly deployed in security-critical applicati
 
 ## Models and datasets
 
-We have released all model weights and related datasets used in our experiments at the following Google Drive link:[https://drive.google.com/drive/folders/1rxDAlHWz_K-QJL-J3r6YKMQw5IbvXn7m?usp=drive_link]
+We have released all model weights and related datasets used in our experiments at the following Zenodo link:[https://zenodo.org/records/17984782]
 
 ## Structure
 
